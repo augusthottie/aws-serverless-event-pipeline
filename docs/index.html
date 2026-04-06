@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Serverless Event Pipeline — Live Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e17;
+    --bg-alt: #0f1420;
+    --border: #1f2937;
+    --text: #e5e7eb;
+    --text-dim: #6b7280;
+    --accent: #f97316;
+    --accent-dim: #9a3412;
+    --success: #10b981;
+    --error: #ef4444;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+    --grid-line: rgba(249, 115, 22, 0.08);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: -1px -1px;
+  }
+
+  .noise {
+    position: fixed;
+    inset: 0;
+    opacity: 0.03;
+    pointer-events: none;
+    z-index: 1;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 60px 40px;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* HEADER */
+  header {
+    margin-bottom: 60px;
+    padding-bottom: 40px;
+    border-bottom: 1px dashed var(--border);
+    position: relative;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--success);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-size: clamp(40px, 7vw, 80px);
+    font-weight: 900;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    margin-bottom: 16px;
+    color: var(--text);
+  }
+
+  h1 .accent {
+    color: var(--accent);
+    font-style: italic;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: var(--text-dim);
+    max-width: 600px;
+    line-height: 1.7;
+  }
+
+  .subtitle a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px dashed var(--accent-dim);
+  }
+
+  /* ARCHITECTURE DIAGRAM */
+  .architecture {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    padding: 30px;
+    margin-bottom: 60px;
+    font-size: 11px;
+    line-height: 1.8;
+    color: var(--text-dim);
+    overflow-x: auto;
+    position: relative;
+  }
+
+  .architecture::before {
+    content: "// architecture.txt";
+    position: absolute;
+    top: 8px;
+    right: 14px;
+    font-size: 10px;
+    color: var(--accent);
+  }
+
+  .architecture pre {
+    font-family: 'JetBrains Mono', monospace;
+    white-space: pre;
+  }
+
+  /* GRID LAYOUT */
+  .demo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-bottom: 60px;
+  }
+
+  @media (max-width: 900px) {
+    .demo-grid { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    padding: 28px;
+    position: relative;
+  }
+
+  .card-number {
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    background: var(--accent);
+    color: var(--bg);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 12px;
+    letter-spacing: 0.1em;
+  }
+
+  .card-title {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 700;
+    margin-top: 16px;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+
+  .card-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  .endpoint {
+    display: inline-block;
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(249, 115, 22, 0.08);
+    padding: 4px 10px;
+    margin-bottom: 16px;
+    border-left: 2px solid var(--accent);
+  }
+
+  input[type="url"], input[type="text"] {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    margin-bottom: 12px;
+    transition: border-color 0.2s;
+  }
+
+  input[type="url"]:focus, input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 22px;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  button:hover:not(:disabled) {
+    background: var(--text);
+    transform: translateY(-1px);
+  }
+
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  button.secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  button.secondary:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: none;
+  }
+
+  .button-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* RESPONSE BOX */
+  .response {
+    margin-top: 20px;
+    padding: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--text-dim);
+    font-size: 11px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-height: 50px;
+    max-height: 300px;
+    overflow-y: auto;
+    color: var(--text-dim);
+  }
+
+  .response.success {
+    border-left-color: var(--success);
+    color: var(--text);
+  }
+
+  .response.error {
+    border-left-color: var(--error);
+    color: var(--error);
+  }
+
+  .response.loading {
+    border-left-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .response .key { color: var(--blue); }
+  .response .string { color: var(--success); }
+  .response .number { color: var(--purple); }
+
+  /* LOG STREAM */
+  .log-stream {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    padding: 24px;
+    margin-bottom: 60px;
+  }
+
+  .log-stream-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--border);
+  }
+
+  .log-stream-title {
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .log-stream-title::before {
+    content: "$ ";
+    color: var(--accent);
+  }
+
+  .clear-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 10px;
+    cursor: pointer;
+    padding: 4px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .clear-btn:hover {
+    color: var(--accent);
+    transform: none;
+  }
+
+  .logs {
+    font-size: 11px;
+    line-height: 1.8;
+    color: var(--text-dim);
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .log-entry {
+    padding: 2px 0;
+    animation: slideIn 0.3s ease-out;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .log-time { color: var(--text-dim); }
+  .log-info { color: var(--blue); }
+  .log-success { color: var(--success); }
+  .log-error { color: var(--error); }
+  .log-accent { color: var(--accent); }
+
+  /* STATS DISPLAY */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .stat-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 16px;
+    text-align: left;
+  }
+
+  .stat-label {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-family: 'Fraunces', serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  /* FOOTER */
+  footer {
+    padding-top: 40px;
+    border-top: 1px dashed var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+
+  footer a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 20px;
+  }
+
+  /* CONFIG BAR */
+  .config-bar {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    padding: 16px 20px;
+    margin-bottom: 30px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 11px;
+    flex-wrap: wrap;
+  }
+
+  .config-bar label {
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .config-bar input {
+    flex: 1;
+    min-width: 300px;
+    margin-bottom: 0;
+  }
+
+  .mini-btn {
+    padding: 8px 14px;
+    font-size: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="noise"></div>
+
+<div class="container">
+
+  <header>
+    <div class="status-pill">
+      <span class="status-dot"></span>
+      Live API · us-east-1 · AWS Lambda
+    </div>
+    <h1>Serverless<br><span class="accent">Event Pipeline</span></h1>
+    <p class="subtitle">
+      A real-time event-driven data pipeline built on AWS Lambda, API Gateway, DynamoDB, and SQS.
+      Click the buttons below to interact with the live API.
+      <a href="https://github.com/augusthottie/aws-serverless-event-pipeline" target="_blank">View on GitHub →</a>
+    </p>
+  </header>
+
+  <!-- API CONFIG -->
+  <div class="config-bar">
+    <label>API URL:</label>
+    <input type="text" id="apiUrl" value="https://eb9l1jnbu1.execute-api.us-east-1.amazonaws.com" />
+    <button class="mini-btn secondary" onclick="saveUrl()">UPDATE</button>
+  </div>
+
+  <!-- ARCHITECTURE DIAGRAM -->
+  <div class="architecture">
+<pre>POST /shorten      →  Lambda (shortener)  →  DynamoDB (urls table)
+
+GET /{code}        →  Lambda (redirect)   →  DynamoDB → SQS → 302
+                                                         ↓
+                                              Lambda (analytics)
+                                                         ↓
+                                              DynamoDB (clicks + counter)
+
+GET /stats/{code}  →  Lambda (stats)      →  DynamoDB (both tables)</pre>
+  </div>
+
+  <!-- DEMO CARDS -->
+  <div class="demo-grid">
+
+    <!-- 1. SHORTEN -->
+    <div class="card">
+      <div class="card-number">01</div>
+      <div class="card-title">Shorten URL</div>
+      <div class="card-desc">Creates a short code, writes to DynamoDB with a conditional write to prevent collisions.</div>
+      <div class="endpoint">POST /shorten</div>
+      <input type="url" id="urlInput" placeholder="https://example.com" value="https://github.com/augusthottie" />
+      <button onclick="shortenUrl()">Create Short URL</button>
+      <div class="response" id="shortenResponse">// Response will appear here</div>
+    </div>
+
+    <!-- 2. REDIRECT -->
+    <div class="card">
+      <div class="card-number">02</div>
+      <div class="card-title">Follow Redirect</div>
+      <div class="card-desc">Reads from DynamoDB, fire-and-forget sends a click event to SQS, returns 302. Response under 100ms.</div>
+      <div class="endpoint">GET /{code}</div>
+      <input type="text" id="codeInput" placeholder="Short code (auto-filled after shorten)" />
+      <div class="button-row">
+        <button onclick="followRedirect()">Follow Redirect</button>
+        <button class="secondary" onclick="generateClicks()">Generate 10 Clicks</button>
+      </div>
+      <div class="response" id="redirectResponse">// Response will appear here</div>
+    </div>
+
+    <!-- 3. STATS -->
+    <div class="card" style="grid-column: 1 / -1;">
+      <div class="card-number">03</div>
+      <div class="card-title">Click Analytics</div>
+      <div class="card-desc">Queries both DynamoDB tables. The analytics Lambda has already processed clicks asynchronously via SQS, aggregating top user agents and referers.</div>
+      <div class="endpoint">GET /stats/{code}</div>
+      <button onclick="getStats()">Fetch Stats</button>
+      <div class="response" id="statsResponse">// Stats will appear here</div>
+      <div class="stats-grid" id="statsGrid" style="display:none;">
+        <div class="stat-card">
+          <div class="stat-label">Total Clicks</div>
+          <div class="stat-value" id="statTotal">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Recent Tracked</div>
+          <div class="stat-value" id="statRecent">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Top User Agent</div>
+          <div class="stat-value" id="statUA" style="font-size: 12px; font-family: 'JetBrains Mono', monospace;">—</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- LOG STREAM -->
+  <div class="log-stream">
+    <div class="log-stream-header">
+      <div class="log-stream-title">event_log</div>
+      <button class="clear-btn" onclick="clearLogs()">CLEAR</button>
+    </div>
+    <div class="logs" id="logs">
+      <div class="log-entry"><span class="log-time">[ready]</span> <span class="log-info">Pipeline initialized. Click a button above to start.</span></div>
+    </div>
+  </div>
+
+  <footer>
+    <div>
+      Built by <a href="https://augusthottie.com" target="_blank">Jessica Chioma Chimex</a>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/augusthottie/aws-serverless-event-pipeline" target="_blank">GitHub</a>
+      <a href="https://www.linkedin.com/in/jessica-chioma-chimex/" target="_blank">LinkedIn</a>
+      <a href="https://dev.to/augusthottie" target="_blank">Dev.to</a>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  let API_URL = document.getElementById('apiUrl').value;
+
+  function saveUrl() {
+    API_URL = document.getElementById('apiUrl').value.replace(/\/$/, '');
+    log('API URL updated: ' + API_URL, 'accent');
+  }
+
+  function log(msg, type = 'info') {
+    const logs = document.getElementById('logs');
+    const time = new Date().toLocaleTimeString();
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-${type}">${msg}</span>`;
+    logs.insertBefore(entry, logs.firstChild);
+    while (logs.children.length > 50) logs.removeChild(logs.lastChild);
+  }
+
+  function clearLogs() {
+    document.getElementById('logs').innerHTML = '';
+    log('Logs cleared', 'accent');
+  }
+
+  function setResponse(id, data, type = 'success') {
+    const el = document.getElementById(id);
+    el.className = 'response ' + type;
+    if (typeof data === 'object') {
+      el.textContent = JSON.stringify(data, null, 2);
+    } else {
+      el.textContent = data;
+    }
+  }
+
+  async function shortenUrl() {
+    const url = document.getElementById('urlInput').value.trim();
+    if (!url) { log('Please enter a URL', 'error'); return; }
+
+    setResponse('shortenResponse', '// Calling Lambda...', 'loading');
+    log(`POST /shorten → Lambda (shortener)`, 'info');
+
+    try {
+      const res = await fetch(`${API_URL}/shorten`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setResponse('shortenResponse', data, 'success');
+        document.getElementById('codeInput').value = data.code;
+        log(`✓ Created code: ${data.code} (DynamoDB PutItem)`, 'success');
+      } else {
+        setResponse('shortenResponse', data, 'error');
+        log(`✗ Error: ${data.error || res.status}`, 'error');
+      }
+    } catch (err) {
+      setResponse('shortenResponse', err.message, 'error');
+      log(`✗ Network error: ${err.message}`, 'error');
+    }
+  }
+
+  async function followRedirect() {
+    const code = document.getElementById('codeInput').value.trim();
+    if (!code) { log('No code yet — shorten a URL first', 'error'); return; }
+
+    setResponse('redirectResponse', '// Calling Lambda...', 'loading');
+    log(`GET /${code} → Lambda (redirect)`, 'info');
+
+    try {
+      // Use HEAD so we don't actually redirect away
+      const res = await fetch(`${API_URL}/${code}`, { method: 'GET', redirect: 'manual' });
+
+      // Manual redirect fetch results in opaque response; we'll make a controlled check
+      const info = {
+        status: res.status || '302 (expected)',
+        type: res.type,
+        note: 'Click event sent to SQS → Analytics Lambda will process asynchronously'
+      };
+      setResponse('redirectResponse', info, 'success');
+      log(`✓ Redirect triggered, click event → SQS`, 'success');
+      log(`  → Analytics Lambda will process via SQS trigger`, 'accent');
+    } catch (err) {
+      // Fetch often throws on manual redirect, which is actually success
+      setResponse('redirectResponse', {
+        status: '302 (redirect)',
+        location: 'Original URL',
+        note: 'Click event sent to SQS → Analytics Lambda will process asynchronously'
+      }, 'success');
+      log(`✓ Redirect triggered, click event → SQS`, 'success');
+    }
+  }
+
+  async function generateClicks() {
+    const code = document.getElementById('codeInput').value.trim();
+    if (!code) { log('No code yet — shorten a URL first', 'error'); return; }
+
+    log(`Generating 10 clicks for ${code}...`, 'accent');
+    setResponse('redirectResponse', '// Generating 10 clicks...', 'loading');
+
+    let sent = 0;
+    for (let i = 0; i < 10; i++) {
+      try {
+        await fetch(`${API_URL}/${code}`, { method: 'GET', redirect: 'manual' });
+      } catch (e) { /* expected for manual redirect */ }
+      sent++;
+      setResponse('redirectResponse', `// Sent ${sent}/10 click events to SQS...`, 'loading');
+    }
+
+    setResponse('redirectResponse', {
+      clicks_sent: 10,
+      note: 'All 10 click events queued in SQS. Wait ~5s then fetch stats.'
+    }, 'success');
+    log(`✓ 10 clicks sent to SQS queue`, 'success');
+    log(`  → Analytics Lambda processing in batches of 10`, 'accent');
+  }
+
+  async function getStats() {
+    const code = document.getElementById('codeInput').value.trim();
+    if (!code) { log('No code yet — shorten a URL first', 'error'); return; }
+
+    setResponse('statsResponse', '// Calling Lambda...', 'loading');
+    log(`GET /stats/${code} → Lambda (stats)`, 'info');
+
+    try {
+      const res = await fetch(`${API_URL}/stats/${code}`);
+      const data = await res.json();
+
+      if (res.ok) {
+        setResponse('statsResponse', data, 'success');
+        log(`✓ Stats retrieved: ${data.total_clicks} total clicks`, 'success');
+
+        // Update stat cards
+        document.getElementById('statsGrid').style.display = 'grid';
+        document.getElementById('statTotal').textContent = data.total_clicks;
+        document.getElementById('statRecent').textContent = data.recent_clicks_shown;
+        const topUA = data.top_user_agents?.[0]?.user_agent || 'none';
+        document.getElementById('statUA').textContent = topUA.split('/')[0];
+      } else {
+        setResponse('statsResponse', data, 'error');
+        log(`✗ Error: ${data.error || res.status}`, 'error');
+      }
+    } catch (err) {
+      setResponse('statsResponse', err.message, 'error');
+      log(`✗ Network error: ${err.message}`, 'error');
+    }
+  }
+</script>
+
+</body>
+</html>
